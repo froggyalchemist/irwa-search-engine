@@ -1,4 +1,11 @@
-# Information Retrieval and Web Analytics (IRWA) - Final Project template
+# Information Retrieval and Web Analytics (IRWA) - Final Project
+
+
+## Team members
+
+- Ramon Casas i Luque
+- Marina Velasco Barriuso
+- Shaoya Zhang
 
 <table>
   <tr>
@@ -6,22 +13,29 @@
       <img src="static/image.png" alt="Project Logo"/>
     </td>
     <td style="vertical-align: top;">
-      This repository contains the template code for the IRWA Final Project - Search Engine with Web Analytics.
+      This repository contains the code for the IRWA Final Project - Search Engine with Web Analytics.
       The project is implemented using Python and the Flask web framework. It includes a simple web application that allows users to search through a collection of documents and view analytics about their searches.
     </td>
   </tr>
 </table>
 
+## Current progress
+![Static Badge](https://img.shields.io/badge/PROGRESS-25%-gold)
+
+1. [Part 1 - Text Processing and Exploratory Data Analysis](project_progress/part_1/README.md)
+
 ----
 ## Project Structure
 
+This is the intended project structure in the final phase of the project:
+
 ```
-/irwa-search-engine
+📂 irwa-search-engine
 ├── myapp                # Contains the main application logic
 ├── templates            # Contains HTML templates for the Flask application
 ├── static               # Contains static assets (images, CSS, JavaScript)
 ├── data                 # Contains the dataset file (fashion_products_dataset.json)
-├── project_progress     # Contains your solutions for Parts 1, 2, and 3 of the project
+├── project_progress     # Contains our solutions for Parts 1 of the project
 ├── .env                 # Environment variables for configuration (e.g., API keys)
 ├── .gitignore           # Specifies files and directories to be ignored by Git
 ├── LICENSE              # License information for the project
