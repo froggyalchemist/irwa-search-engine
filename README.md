@@ -23,6 +23,7 @@
 ![Static Badge](https://img.shields.io/badge/PROGRESS-25%-gold)
 
 1. [Part 1 - Text Processing and Exploratory Data Analysis](project_progress/part_1/README.md)
+2. [Part 2 - Indexing and Evaluation](project_progress/part_2/README.md)
 
 ----
 ## Project Structure

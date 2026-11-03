@@ -1,4 +1,4 @@
-# Part 2 - Text Processing and Exploratory Data Analysis
+# Part 2 - Indexing and Evaluation
 
 This part builds an inverted index for the fashion product collection, retrieves products using conjunctive queries, and ranks the results using TF-IDF. It also evaluates the results using supplied and manually assigned relevance labels. The implementation is in [build_index.ipynb](build_index.ipynb).
 
