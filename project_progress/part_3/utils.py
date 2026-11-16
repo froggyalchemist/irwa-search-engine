@@ -24,7 +24,14 @@ TEST_QUERIES = [
 ]
 
 def load_index_info(filename):
-    #TODO: document this function
+    """
+    Load preprocessed product fields from a CSV file for indexing.
+
+    :param filename: Path to the CSV file accepted by pandas.read_csv.
+    :returns: A tuple (index_info, fields). index_info is a DataFrame with
+        parsed fields, sorted by 'pid' in ascending order and with its row
+        index reset. fields lists all columns except 'pid' in CSV order.
+    """
 
     index_info = pd.read_csv(filename)
 
@@ -203,6 +210,7 @@ def rank_documents(terms, docs, index, idf, tf, fields, field_weights):
     result_docs = [x[1] for x in doc_scores]
     return result_docs
 
+# Conjunctive queries
 def search(query, index):
     """
     The output is the list of documents that contain ALL of the query terms.
