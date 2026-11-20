@@ -1,7 +1,8 @@
 """utils.py
 This module contains functions we defined in Part 2 
-related to filtering and ranking, as well as useful
-
+related to filtering and ranking, as well as
+functions to load / save rankings to CSV files for evaluation
+purposes
 """
 import ast
 import os
@@ -23,6 +24,8 @@ TEST_QUERIES = [
     "soft jacket for women",
     "grey hoodie with pockets",
 ]
+
+#region FUNCTIONS FROM PART 2 -------------------------
 
 def load_index_info(filename):
     """
@@ -289,6 +292,9 @@ def display_results(query, ranked_docs, df, top=10):
         # 2. Description in grey
         print(f"   \033[90m{desc}\033[0m\n")    
 
+#endregion
+
+#region NEW FUNCTIONS TO EVALUATE RANKINGS ----------------------
 
 # Evaluation of the ranking methods with manually labeled test queries
 def get_rankings(queries, search_functions, top_n=20):
@@ -443,7 +449,7 @@ def evaluate_rankings_ndcg(queries, rankings, labels_df, k=20):
     per_query.loc["mean"] = per_query.mean()
     return per_query
 
-
+# TODO: decide if we keep this Jaccard overlap analysis or not
 def rankings_overlap(rankings, k=20):
     """
     Average Jaccard overlap between the top-k results of each pair of methods.
@@ -462,3 +468,5 @@ def rankings_overlap(rankings, k=20):
             ]
             out.loc[a, b] = np.mean(jaccards)
     return out
+
+#endregion
