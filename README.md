@@ -24,6 +24,7 @@
 
 1. [Part 1 - Text Processing and Exploratory Data Analysis](project_progress/part_1/README.md)
 2. [Part 2 - Indexing and Evaluation](project_progress/part_2/README.md)
+2. [Part 3 - Ranking and Filtering](project_progress/part_3/README.md)
 
 ----
 ## Project Structure
