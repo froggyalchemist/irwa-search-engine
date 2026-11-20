@@ -4,6 +4,7 @@ related to filtering and ranking, as well as useful
 
 """
 import ast
+import os
 import pandas as pd
 import numpy as np
 from numpy import linalg as la
@@ -288,3 +289,176 @@ def display_results(query, ranked_docs, df, top=10):
         # 2. Description in grey
         print(f"   \033[90m{desc}\033[0m\n")    
 
+
+# Evaluation of the ranking methods with manually labeled test queries
+def get_rankings(queries, search_functions, top_n=20):
+    """
+    Run every search function on every query and keep the top_n results.
+
+    :param queries: dict {query_id: query text}
+    :param search_functions: dict {method name: function(query) -> list of ranked pids}
+    :param top_n: number of results kept per query and method
+    :returns: dict {method name: {query_id: [pid_1, ..., pid_top_n]}}
+    """
+    return {
+        method: {qid: list(fn(q))[:top_n] for qid, q in queries.items()}
+        for method, fn in search_functions.items()
+    }
+
+
+def export_pooled_rankings(out_path, queries, rankings, products_df, previous_labels_path=None):
+    """
+    Export the union (pool) of the top results of all methods to a CSV to be labeled by hand.
+
+    Each (query, product) pair appears only once, even if several methods retrieved it,
+    so every product is labeled just one time. Rows are sorted by pid inside each query
+    so the labeler cannot tell which method ranked a product higher (blind labeling).
+
+    The file is NOT overwritten if it already exists, so manual labels are never lost.
+
+    :param out_path: path of the CSV to create
+    :param queries: dict {query_id: query text}
+    :param rankings: output of get_rankings
+    :param products_df: original products DataFrame (with 'pid', 'title', 'description')
+    :param previous_labels_path: optional CSV with columns 'query_id', 'pid', 'labels'
+        (e.g. the Part 2 labels) used to prefill labels that we already know
+    :returns: the exported (or existing) DataFrame
+    """
+    if os.path.exists(out_path):
+        print(f"{out_path} already exists, nothing exported. Delete it manually to generate it again.")
+        return pd.read_csv(out_path)
+
+    # Union of the top results of every method, per query
+    pool = []
+    for qid, query in queries.items():
+        pids = set()
+        for method_rankings in rankings.values():
+            pids.update(method_rankings[qid])
+        pool.extend({"query_id": qid, "query": query, "pid": pid} for pid in sorted(pids))
+    export_df = pd.DataFrame(pool)
+
+    # Add original title and description to help the labeler
+    info = products_df.drop_duplicates("pid").set_index("pid")[["title", "description"]]
+    export_df = export_df.join(info, on="pid")
+
+    # Prefill labels we already have
+    export_df["labels"] = np.nan
+    if previous_labels_path is not None and os.path.exists(previous_labels_path):
+        prev = pd.read_csv(previous_labels_path)[["query_id", "pid", "labels"]].dropna()
+        prev = prev.drop_duplicates(["query_id", "pid"]).set_index(["query_id", "pid"])["labels"]
+        keys = pd.MultiIndex.from_frame(export_df[["query_id", "pid"]])
+        export_df["labels"] = prev.reindex(keys).to_numpy()
+
+    export_df = export_df[["query_id", "query", "pid", "title", "description", "labels"]]
+    export_df.to_csv(out_path, index=False)
+
+    n_missing = export_df["labels"].isna().sum()
+    print(f"Exported {len(export_df)} rows to {out_path} ({n_missing} still need a label)")
+    print(export_df.groupby("query_id").size().rename("pooled products per query").to_string())
+    return export_df
+
+
+def load_labels(path):
+    """
+    Read the manually labeled CSV and check that every label is a non-negative integer
+    (0 = non-relevant; higher = more relevant, e.g. 0/1 or graded 0/1/2).
+
+    :param path: CSV created by export_pooled_rankings, with the 'labels' column filled in
+    :returns: DataFrame with columns 'query_id', 'pid', 'labels' (int)
+    """
+    labels_df = pd.read_csv(path)
+    labels = pd.to_numeric(labels_df["labels"], errors="coerce")
+    invalid = labels.isna() | (labels < 0) | (labels % 1 != 0)
+    if invalid.any():
+        raise ValueError(
+            f"{invalid.sum()} rows in {path} have a missing or invalid label "
+            f"(expected a non-negative integer). First ones:\n"
+            f"{labels_df.loc[invalid, ['query_id', 'pid', 'title']].head().to_string()}"
+        )
+    labels_df["labels"] = labels.astype(int)
+    return labels_df[["query_id", "pid", "labels"]]
+
+
+def dcg_at_k(relevances, k):
+    """
+    Discounted Cumulative Gain of a list of relevance labels given in ranked order.
+
+    DCG@k = sum_{i=1}^{k} (2^{rel_i} - 1) / log2(i + 1)
+    """
+    rel = np.asarray(relevances, dtype=float)[:k]
+    discounts = np.log2(np.arange(len(rel)) + 2)
+    return np.sum((2 ** rel - 1) / discounts)
+
+
+def ndcg_at_k(ranked_relevances, all_relevances, k):
+    """
+    Normalized DCG@k.
+
+    The ideal DCG is computed from ALL the labeled products of the query (the whole pool),
+    not only from the ones this method retrieved. This way a method that misses relevant
+    products found by the other methods is penalized, and scores are comparable across methods.
+
+    :param ranked_relevances: labels of the method's results, in ranked order
+    :param all_relevances: labels of every judged product for this query
+    :param k: cutoff
+    """
+    ideal = dcg_at_k(sorted(all_relevances, reverse=True), k)
+    if ideal == 0:
+        return 0.0
+    return dcg_at_k(ranked_relevances, k) / ideal
+
+
+def evaluate_rankings_ndcg(queries, rankings, labels_df, k=20):
+    """
+    Compute NDCG@k of every method on every query.
+
+    Products in a ranking that have no label are treated as non-relevant (0) and reported,
+    which can happen if a method changed after the labels were exported.
+
+    :param queries: dict {query_id: query text}
+    :param rankings: output of get_rankings
+    :param labels_df: output of load_labels
+    :param k: cutoff
+    :returns: DataFrame with one row per query (+ a 'mean' row) and one column per method
+    """
+    judged = {
+        qid: dict(zip(group["pid"], group["labels"]))
+        for qid, group in labels_df.groupby("query_id")
+    }
+
+    results = {}
+    for method, method_rankings in rankings.items():
+        results[method] = {}
+        for qid in queries:
+            qrels = judged.get(qid, {})
+            ranked = method_rankings[qid][:k]
+            unjudged = [pid for pid in ranked if pid not in qrels]
+            if unjudged:
+                print(f"[{method}] query {qid}: {len(unjudged)} unlabeled products treated as non-relevant")
+            ranked_rel = [qrels.get(pid, 0) for pid in ranked]
+            results[method][qid] = ndcg_at_k(ranked_rel, list(qrels.values()), k)
+
+    per_query = pd.DataFrame(results)
+    per_query.index = [f"{qid}: {queries[qid]}" for qid in per_query.index]
+    per_query.loc["mean"] = per_query.mean()
+    return per_query
+
+
+def rankings_overlap(rankings, k=20):
+    """
+    Average Jaccard overlap between the top-k results of each pair of methods.
+
+    :param rankings: output of get_rankings
+    :returns: square DataFrame (methods x methods)
+    """
+    methods = list(rankings)
+    out = pd.DataFrame(index=methods, columns=methods, dtype=float)
+    for a in methods:
+        for b in methods:
+            jaccards = [
+                len(set(rankings[a][q][:k]) & set(rankings[b][q][:k]))
+                / max(len(set(rankings[a][q][:k]) | set(rankings[b][q][:k])), 1)
+                for q in rankings[a]
+            ]
+            out.loc[a, b] = np.mean(jaccards)
+    return out
